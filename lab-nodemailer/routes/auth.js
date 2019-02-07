@@ -1,16 +1,8 @@
 const express = require("express");
 const passport = require('passport');
+const transporter = require('../configs/transporter');
 const router = express.Router();
 const User = require("../models/User");
-const nodemailer = require("nodemailer")
-
-let transporter = nodemailer.createTransport({
-  service: 'Gmail',
-  auth: {
-    user: process.env.GMAIL_EMAIL,
-    pass: process.env.GMAIL_PASSWORD
-  }
-});
 
 // Bcrypt to encrypt passwords
 const bcrypt = require("bcrypt");
@@ -32,71 +24,87 @@ router.get("/signup", (req, res, next) => {
   res.render("auth/signup");
 });
 
-
 router.post("/signup", (req, res, next) => {
   const username = req.body.username;
   const password = req.body.password;
   const email = req.body.email;
-  if (username === "" || password === "") {
-    res.render("auth/signup", { message: "Indicate username and password" });
+  if (username === "" || password === "" || email === "") {
+    res.render("auth/signup", { message: "Indicate username, password and email" });
     return;
   }
-  if (email === "") {
-    res.render("auth/signup", { message: "Indicate email" });
-    return;
-  }
-  
-  
-  User.findOne({ username }, "username", (err, user) => {
+
+  // Find 1 user with the same username OR email
+  User.findOne({ $or: [{ username }, { email }] }, "username", (err, user) => {
     if (user !== null) {
-      res.render("auth/signup", { message: "The username already exists" });
+      res.render("auth/signup", { message: "The username or the email already exists" });
       return;
     }
-    
+
     const salt = bcrypt.genSaltSync(bcryptSalt);
     const hashPass = bcrypt.hashSync(password, salt);
 
     const characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     let token = '';
     for (let i = 0; i < 25; i++) {
-      token += characters[Math.floor(Math.random() * characters.length )];
+      token += characters[Math.floor(Math.random() * characters.length)];
     }
-    const confirmationCode =  token;
-    
+
+    // Save the user with all necessary
     const newUser = new User({
-      username: username,
+      username,
       password: hashPass,
-      email: email,
-      confirmationCode: confirmationCode,
+      email,
+      confirmationCode: token
     });
 
-    // send an email,  with the text http://localhost:3000/auth/confirm/THE-CONFIRMATION-CODE-OF-THE-USER
-
-    router.post('/send-email', (req, res, next) => {
-      let { email } = req.body;
-      transporter.sendMail({
-        from: '"WEB DEVELOPER" <iyereemmanuelakhere@gmail.com>',
-        to: email, 
-        subject: subject, 
-        text: "http://localhost:3000/auth/confirm/THE-CONFIRMATION-CODE-OF-THE-USER",
-        html: `<b>${message}</b>`
-      })
-      .then(info => res.render('message', {email, subject, message, 
-        info: JSON.stringify(info,null,2)
-      }))
-      .catch(error => console.log(error));
-    });
-
+    let message = `
+      Hello ${username}! 
+      To confirm your email, please go to this link: ${process.env.BASE_URL}/auth/confirm/${token}
+    `
 
     newUser.save()
-    .then(() => {
-      res.redirect("/");
-    })
-    .catch(err => {
-      res.render("auth/signup", { message: "Something went wrong" });
-    })
+      .then(() => {
+        transporter.sendMail({
+          from: '"Charlotte" <charlotte.treuse7fff00@gmail.com>',
+          to: email,
+          subject: 'Validate your account',
+          text: message,
+          html: `<b>${message}</b>`
+        })
+        .then(() => {
+          res.redirect("/auth/signup-done");
+        })
+      })
+      .catch(err => {
+        res.render("auth/signup", { message: "Something went wrong" });
+      })
   });
 });
+
+router.get('/signup-done', (req,res,next)=>{
+  res.render('auth/signup-done')
+})
+
+router.get('/confirm/:confirmationCode', (req,res,next)=>{
+  User.findOneAndUpdate(
+    { confirmationCode: req.params.confirmationCode },
+    { status: 'Active' }
+  )
+    .then(user => {
+      if (user) {
+				console.log('TCL: user', user)
+        // We log in the user found in the database
+        req.logIn(user, () => {
+          res.render('auth/confirmation-success', { 
+            user,
+            isConnectedAndActive: true // To override the value defined by a previous middleware
+          })
+        })
+      } 
+      else res.render('auth/confirmation-failed')
+    })
+    .catch(err => next(err))
+})
 
 router.get("/logout", (req, res) => {
   req.logout();

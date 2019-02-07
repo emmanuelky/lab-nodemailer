@@ -73,7 +73,16 @@ app.use(session({
 }))
 app.use(flash());
 require('./passport')(app);
-    
+
+
+app.use((req,res,next) => {
+  console.log('Hello everyone!!');
+  // This code is executed at every request
+  // It defines a view variable isConnectedAndActive = true or false
+  res.locals.isConnectedAndActive = req.user && req.user.status === 'Active'
+  next()
+})
+
 
 const index = require('./routes/index');
 app.use('/', index);
