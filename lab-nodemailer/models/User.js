@@ -5,16 +5,20 @@ const userSchema = new Schema(
   {
     username: String,
     password: String,
-    status: { type: String, required: true, enum: ["Pending Confirmation","Active"] },
+    status: {
+      type: String,
+      required: true,
+      enum: ["Pending Confirmation", "Active"]
+    },
     confirmationCode: { type: String, required: true },
-    email: { type: String, required: true },
+    email: { type: String, required: true }
   },
   {
     timestamps: {
       createdAt: "created_at",
       updatedAt: "updated_at"
     }
-  },
+  }
 );
 
 const User = mongoose.model("User", userSchema);
